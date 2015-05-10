@@ -1,0 +1,132 @@
+---
+title: "Machine Learning Project"
+output: html_document
+---
+
+The purpose of this exercise is to build a machine learning algorithm to predict activity quality based on wearable activity monitors. The data used to conduct this analysis is from http://groupware.les.inf.puc-rio.br/har. The scope of the project was to identify the activity quality using a classification algorithm using tools available in R. More specifically, the following analysis borrows heavily on the 'caret' and 'randomForest' package for prediction and evaluation of model results. The following sections details some of the data cleaning, model training, goodness of fit, and supplement codes and charts for reproducibility.
+
+
+###Data Preparation
+```{r, eval=FALSE}
+##Prepare Packages
+library(caret)
+library(ggplot2)
+library(lattice)
+library(kernlab)
+library(randomForest)
+```
+
+```{r, eval=FALSE}
+#Data Prep
+#Download Files
+download.file(url = "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml-training.csv", mode='wb')
+download.file(url = "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "pml-testing.csv", mode='wb')
+```
+
+```{r, cache=TRUE}
+#Raw Files
+trainRaw <- read.csv('pml-training.csv')
+testRaw <- read.csv('pml-testing.csv')
+```
+
+Upon examining the data, there were several columns removed due to lack of information. Cleaning the data will speed processing time which is a weakness of several machine learning techniques.
+
+```{r, cache=TRUE, eval=FALSE}
+#Data Cleaning
+#Remove near zero variance predictors
+remove_nzero <- nearZeroVar(trainRaw)
+length(remove_nzero) #60 Vars with near zero variance
+
+trainClean1 <-trainRaw[,-remove_nzero]
+
+#remove columns with over a 90% that have NAs
+nasPerColumn <- apply(trainClean1,2,function(x) {sum(is.na(x))});
+trainClean2  <- trainClean1[,which(nasPerColumn <  nrow(trainClean1)*0.9)];  
+
+#remove additonal attributes
+trainClean <- trainClean2[, -which(names(trainClean2) %in% c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "num_window"))]
+
+
+dim(trainClean)
+#19622rows 53cols
+
+summary(trainClean$classe)
+```
+
+For Validation purposes, the data was split 60/40. Since the data set is relatively large, this should be sufficient for training purposes.
+```{r, cache=TRUE}
+#Create Train/Validation Data using .60/.40 Split
+set.seed(5555)
+
+Split <- createDataPartition(y = trainClean$classe, p=0.6,list=FALSE);
+
+training60 <- trainClean[Split,];
+testing40 <- trainClean[-Split,];
+
+#basic housekeeping, remove some datasets
+rm(Split, trainClean1, trainClean2, trainClean)
+```
+
+
+The tool of choice for this classification problem is Random Forest (RF). There are several other tools available such as LDA, but RF is typically strong for classification problems. Here we use the Random Forest package to perform the training.
+
+```{r, cache=TRUE}
+#Random Foreset Algorithm
+model1 <- randomForest(classe ~ ., data=training60, importance = TRUE, ntrees = 8)
+
+```
+
+Fit on Training Sample
+```{r, cache=TRUE}
+#Estimated Error Rate
+model1
+```
+We see that the estimated error rate is very good at 0.6%. The error rate on the validation sample is shown several paragraphs below. 
+
+We examine the variable importance of the RF algorithm as a sanity check and plot two of the top factor.
+
+```{r, eval=FALSE}
+#Var Importance
+importance(model1)
+
+#See that roll_belt, pitch_belt, and yaw_belt are top 3
+
+```
+
+
+```{r}
+
+#Plot some important factors
+
+library(ggplot2)
+
+#p<- qplot(roll_belt, pitch_belt, col=classe, data=trainRaw)
+p2<- qplot(roll_belt, yaw_belt, col=classe, data=trainRaw)
+
+#p + geom_point(aes(x=roll_belt, y=pitch_belt, col=classe), data=trainRaw)
+p2 + geom_point(aes(x=roll_belt, y=yaw_belt, col=classe), data=trainRaw)
+
+```
+    
+    
+    
+    
+    The chart shows that with these two variables the classes follow a distinct pattern. For example, when rollbelt is less than 50 with yawbelt is approx -100 the two classes present are D and E.
+
+
+Fit on Validation Sample:
+```{r, cache=TRUE}
+test40_pr <- predict(model1, testing40) 
+ 
+print(confusionMatrix(test40_pr, testing40$classe))
+```
+
+Here we see that the accuracy is approx. 99.31%. 
+
+
+
+```{r}
+#Fit on Test
+#testRaw_pr <- predict(model1, testRaw)
+#testRaw_pr
+```
